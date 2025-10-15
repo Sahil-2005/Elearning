@@ -6,6 +6,11 @@ const CommentSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     userName: { type: String, required: true },
     content: { type: String, required: true, trim: true },
+    sentiment: {
+      type: String,
+      enum: ['positive', 'negative', 'neutral', 'mixed'],
+      default: 'neutral',
+    },
   },
   { timestamps: true }
 );

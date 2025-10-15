@@ -527,9 +527,9 @@ export default function ELearningPortal() {
                         Edit
                       </button>
                     )}
-                    <button className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)] shadow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
+                    {/* <button className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)] shadow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
                       Enroll Now
-                    </button>
+                    </button> */}
                   </div>
                 </div>
 
@@ -1069,7 +1069,23 @@ function CommentItem({ comment, whenStr, canEdit, onDelete, onEdit }) {
   return (
     <div className="rounded-lg border border-border bg-secondary p-3">
       <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{comment.userName}</span>
+        <span className="flex items-center gap-2">
+          {comment.userName}
+          {comment.sentiment ? (
+            <span
+              className={[
+                'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium',
+                comment.sentiment === 'positive' ? 'bg-green-500/15 text-green-600' : '',
+                comment.sentiment === 'negative' ? 'bg-red-500/15 text-red-600' : '',
+                comment.sentiment === 'neutral' ? 'bg-gray-500/15 text-gray-600' : '',
+                comment.sentiment === 'mixed' ? 'bg-yellow-500/15 text-yellow-700' : '',
+              ].join(' ')}
+              title={`Sentiment: ${comment.sentiment}`}
+            >
+              {comment.sentiment}
+            </span>
+          ) : null}
+        </span>
         <div className="flex items-center gap-2">
           {whenStr ? <span>{whenStr}</span> : null}
           {canEdit ? (

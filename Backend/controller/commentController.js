@@ -1,7 +1,37 @@
 const Comment = require('../models/Comment');
+const axios = require('axios');
 
 // In-memory SSE subscribers by courseId
 const courseSubscribers = new Map(); // courseId -> Set(res)
+
+// --- Helper function for Azure Sentiment Analysis ---
+async function getSentiment(text) {
+  // Return default if keys or endpoint are not set in environment variables
+  if (!process.env.COG_KEY || !process.env.COG_ENDPOINT) {
+    console.log('Azure AI credentials not configured. Skipping sentiment analysis.');
+    return 'neutral';
+  }
+
+  try {
+    // Robustly format the endpoint URL to ensure it has a trailing slash
+    const sentimentUrl = `${(process.env.COG_ENDPOINT).replace(/\/?$/, '/')}text/analytics/v3.1/sentiment`;
+    const documents = { documents: [{ id: '1', language: 'en', text }] };
+    const headers = {
+      'Ocp-Apim-Subscription-Key': process.env.COG_KEY,
+      'Content-Type': 'application/json',
+    };
+    
+    const response = await axios.post(sentimentUrl, documents, { headers });
+
+    if (response.data?.documents?.length) {
+      return response.data.documents[0].sentiment; // Return the detected sentiment
+    }
+  } catch (apiError) {
+    console.error('Azure AI service call failed:', apiError.message);
+  }
+
+  return 'neutral'; // Return default sentiment on failure
+}
 
 function sendEvent(res, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -28,12 +58,18 @@ async function addComment(req, res) {
     const { content } = req.body;
     if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
     if (!content) return res.status(400).json({ message: 'content is required' });
+
+    // **Call the reusable helper function to get sentiment**
+    const sentimentResult = await getSentiment(content);
+
     const comment = await Comment.create({
       courseId,
       userId: req.user.id,
       userName: req.user.email,
       content,
+      sentiment: sentimentResult,
     });
+    
     // Broadcast to SSE subscribers
     const subs = getSubscribers(courseId);
     subs.forEach((client) => {
@@ -70,8 +106,13 @@ async function updateComment(req, res) {
     if (!comment || comment.courseId.toString() !== courseId) return res.status(404).json({ message: 'Comment not found' });
     if (comment.userId.toString() !== req.user.id) return res.status(403).json({ message: 'Forbidden' });
     if (!content) return res.status(400).json({ message: 'content is required' });
+    
     comment.content = content;
+    // **Call the reusable helper function again on update**
+    comment.sentiment = await getSentiment(content);
+    
     await comment.save();
+    
     const subs = getSubscribers(courseId);
     subs.forEach((client) => {
       try { sendEvent(client, { type: 'comment', action: 'updated', comment }); } catch (_) {}
@@ -89,7 +130,9 @@ async function deleteComment(req, res) {
     const comment = await Comment.findById(commentId);
     if (!comment || comment.courseId.toString() !== courseId) return res.status(404).json({ message: 'Comment not found' });
     if (comment.userId.toString() !== req.user.id) return res.status(403).json({ message: 'Forbidden' });
+    
     await comment.deleteOne();
+    
     const subs = getSubscribers(courseId);
     subs.forEach((client) => {
       try { sendEvent(client, { type: 'comment', action: 'deleted', commentId }); } catch (_) {}
@@ -101,5 +144,3 @@ async function deleteComment(req, res) {
 }
 
 module.exports = { listComments, addComment, streamComments, updateComment, deleteComment };
-
-
