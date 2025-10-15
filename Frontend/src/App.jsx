@@ -44,41 +44,7 @@ export default function ELearningPortal() {
   const API_URL = (import.meta?.env?.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
 
   // Demo courses
-  const [courses, setCourses] = useState([
-    {
-      id: "1",
-      title: "Modern React Patterns",
-      instructor: "Alex Johnson",
-      description:
-        "Master modern React patterns including hooks, context, and performance optimizations to build scalable applications.",
-      duration: "6 Weeks",
-      difficulty: "Beginner",
-      categories: ["React", "Hooks", "Patterns"],
-      thumbnail: "/react-course-thumbnail.jpg",
-    },
-    {
-      id: "2",
-      title: "Node.js APIs with Express",
-      instructor: "Sam Lee",
-      description:
-        "Design and build production-grade REST APIs with Node.js and Express. Learn routing, middleware, and testing.",
-      duration: "4 Weeks",
-      difficulty: "Intermediate",
-      categories: ["Node.js", "Express", "APIs"],
-      thumbnail: "/node-js-api-course.jpg",
-    },
-    {
-      id: "3",
-      title: "MongoDB for Developers",
-      instructor: "Priya Sharma",
-      description:
-        "A practical guide to modeling data, schema design, indexing, and aggregation pipelines with MongoDB.",
-      duration: "5 Weeks",
-      difficulty: "Beginner",
-      categories: ["MongoDB", "Databases"],
-      thumbnail: "/mongodb-course-thumbnail.jpg",
-    },
-  ]);
+  const [courses, setCourses] = useState([]);
 
   // Modal state (Teacher only)
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -88,9 +54,13 @@ export default function ELearningPortal() {
   const [newCourseDifficulty, setNewCourseDifficulty] = useState("Beginner");
   const [newCourseCategories, setNewCourseCategories] = useState("React, UI");
   const [newCourseThumbnail, setNewCourseThumbnail] = useState("/new-course-thumbnail.jpg");
+  const [newCourseThumbnailFile, setNewCourseThumbnailFile] = useState(null);
   const [newCourseVideoUrl, setNewCourseVideoUrl] = useState("");
+  const [newCourseVideoFile, setNewCourseVideoFile] = useState(null);
 
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editCourse, setEditCourse] = useState(null);
 
   const isTeacher = currentUser?.role === "Teacher";
 
@@ -165,37 +135,89 @@ export default function ELearningPortal() {
 
   useEffect(() => {
     fetchMe();
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/courses`);
+        const data = await res.json();
+        if (!res.ok) return;
+        const mapped = (data.courses || []).map((c) => ({
+          id: c._id,
+          title: c.title,
+          instructorId: c.instructorId,
+          instructor: c.instructorName,
+          description: c.description,
+          duration: c.duration,
+          difficulty: c.difficulty,
+          categories: c.categories || [],
+          thumbnail: c.thumbnailUrl,
+          videoUrl: c.videoUrl,
+        }));
+        setCourses(mapped);
+      } catch {
+        // ignore
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleCreateCourse(e) {
+  async function handleCreateCourse(e) {
     e.preventDefault();
     if (!newCourseTitle || !newCourseDescription) return;
-    const newCourse = {
-      id: Math.random().toString(36).slice(2),
-      title: newCourseTitle,
-      instructor: currentUser?.name || "You",
-      description: newCourseDescription,
-      duration: newCourseDuration,
-      difficulty: newCourseDifficulty,
-      categories: newCourseCategories
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean),
-      thumbnail: newCourseThumbnail,
-      videoUrl: newCourseVideoUrl || undefined,
-    };
-    setCourses((prev) => [newCourse, ...prev]);
-
-    // reset form
-    setNewCourseTitle("");
-    setNewCourseDescription("");
-    setNewCourseDuration("6 Weeks");
-    setNewCourseDifficulty("Beginner");
-    setNewCourseCategories("React, UI");
-    setNewCourseThumbnail("/new-course-thumbnail.jpg");
-    setNewCourseVideoUrl("");
-    setIsCreateOpen(false);
+    const token = localStorage.getItem("token");
+    const form = new FormData();
+    form.append("title", newCourseTitle);
+    form.append("description", newCourseDescription);
+    form.append("duration", newCourseDuration);
+    form.append("difficulty", newCourseDifficulty);
+    form.append("categories", newCourseCategories);
+    if (newCourseThumbnailFile) {
+      form.append("thumbnail", newCourseThumbnailFile);
+    } else if (newCourseThumbnail) {
+      form.append("thumbnailUrl", newCourseThumbnail);
+    }
+    if (newCourseVideoFile) {
+      form.append("video", newCourseVideoFile);
+    } else if (newCourseVideoUrl) {
+      form.append("videoUrl", newCourseVideoUrl);
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/courses`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "Failed to create course");
+      // prepend new course
+      setCourses((prev) => [
+        {
+          id: data.course._id,
+          instructorId: data.course.instructorId,
+          title: data.course.title,
+          instructor: data.course.instructorName,
+          description: data.course.description,
+          duration: data.course.duration,
+          difficulty: data.course.difficulty,
+          categories: data.course.categories,
+          thumbnail: data.course.thumbnailUrl,
+          videoUrl: data.course.videoUrl,
+        },
+        ...prev,
+      ]);
+      // reset form
+      setNewCourseTitle("");
+      setNewCourseDescription("");
+      setNewCourseDuration("6 Weeks");
+      setNewCourseDifficulty("Beginner");
+      setNewCourseCategories("React, UI");
+      setNewCourseThumbnail("/new-course-thumbnail.jpg");
+      setNewCourseThumbnailFile(null);
+      setNewCourseVideoUrl("");
+      setNewCourseVideoFile(null);
+      setIsCreateOpen(false);
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   return (
@@ -494,6 +516,17 @@ export default function ELearningPortal() {
                     >
                       Back to Dashboard
                     </button>
+                    {isTeacher && currentUser?.id === selectedCourse?.instructorId && (
+                      <button
+                        onClick={() => {
+                          setEditCourse({ ...selectedCourse });
+                          setIsEditOpen(true);
+                        }}
+                        className="rounded-lg border border-border bg-transparent px-4 py-2 text-sm transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+                      >
+                        Edit
+                      </button>
+                    )}
                     <button className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)] shadow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]">
                       Enroll Now
                     </button>
@@ -503,7 +536,21 @@ export default function ELearningPortal() {
                 {/* Media: Prefer video if available */}
                 <div className="overflow-hidden rounded-2xl border border-border bg-card">
                   {selectedCourse.videoUrl ? (
-                    <video controls className="aspect-video w-full" src={selectedCourse.videoUrl} />
+                    selectedCourse.videoUrl.includes('youtube.com') || selectedCourse.videoUrl.includes('youtu.be') ? (
+                      <iframe
+                        className="aspect-video w-full"
+                        src={
+                          selectedCourse.videoUrl.includes('watch?v=')
+                            ? selectedCourse.videoUrl.replace('watch?v=', 'embed/')
+                            : selectedCourse.videoUrl.replace('youtu.be/', 'www.youtube.com/embed/')
+                        }
+                        title="Course video"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video controls className="aspect-video w-full" src={selectedCourse.videoUrl} />
+                    )
                   ) : (
                     <img
                       src={
@@ -648,15 +695,27 @@ export default function ELearningPortal() {
                   </select>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="course-thumbnail" className="text-sm">
-                    Thumbnail URL
-                  </label>
+                <label htmlFor="course-thumbnail" className="text-sm">
+                  Thumbnail URL (or upload below)
+                </label>
+                <input
+                  id="course-thumbnail"
+                  value={newCourseThumbnail}
+                  onChange={(e) => setNewCourseThumbnail(e.currentTarget.value)}
+                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground placeholder:text-muted-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+                />
                   <input
-                    id="course-thumbnail"
-                    value={newCourseThumbnail}
-                    onChange={(e) => setNewCourseThumbnail(e.currentTarget.value)}
-                    className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground placeholder:text-muted-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
-                  />
+                  id="course-thumbnail-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0] || null;
+                    setNewCourseThumbnailFile(file);
+                    // If a file is selected, clear URL to avoid sending both
+                    if (file) setNewCourseThumbnail("");
+                  }}
+                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground outline-none transition file:me-3 file:rounded-md file:border-0 file:bg-[var(--color-brand)] file:px-3 file:py-1.5 file:text-[var(--color-brand-foreground)] file:text-sm hover:file:brightness-110"
+                />
                 </div>
               </div>
 
@@ -678,17 +737,22 @@ export default function ELearningPortal() {
 
               <div className="flex flex-col gap-2">
                 <label htmlFor="course-video-file" className="text-sm">
-                  Upload Video (optional)
+                  Upload Video (optional) or paste URL above
                 </label>
                 <input
                   id="course-video-file"
                   type="file"
                   accept="video/*"
                   onChange={(e) => {
-                    const file = e.currentTarget.files?.[0];
+                    const file = e.currentTarget.files?.[0] || null;
+                    setNewCourseVideoFile(file);
                     if (file) {
                       const url = URL.createObjectURL(file);
                       setNewCourseVideoUrl(url);
+                      // Clear URL input to ensure server gets only file
+                      // setNewCourseVideoUrl(""); // keep preview
+                    } else {
+                      setNewCourseVideoUrl("");
                     }
                   }}
                   className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground outline-none transition file:me-3 file:rounded-md file:border-0 file:bg-[var(--color-brand)] file:px-3 file:py-1.5 file:text-[var(--color-brand-foreground)] file:text-sm hover:file:brightness-110"
@@ -717,6 +781,142 @@ export default function ELearningPortal() {
           </div>
         </div>
       )}
+
+      {/* Modal: Edit Course (Teacher) */}
+      {isTeacher && isEditOpen && editCourse && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-course-title"
+        >
+          <div
+            className="absolute inset-0 bg-foreground/10 backdrop-blur-sm transition"
+            onClick={() => setIsEditOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 id="edit-course-title" className="text-lg font-semibold leading-tight">
+                  Edit Course
+                </h3>
+                <p className="text-sm text-muted-foreground">Update details for your course.</p>
+              </div>
+              <button
+                onClick={() => setIsEditOpen(false)}
+                className="rounded-lg px-2 py-1 text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <EditCourseForm
+              course={editCourse}
+              onClose={() => setIsEditOpen(false)}
+              onSaved={(updated) => {
+                setCourses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+                setSelectedCourse((prev) => (prev && prev.id === updated.id ? updated : prev));
+                setIsEditOpen(false);
+              }}
+              API_URL={API_URL}
+            />
+          </div>
+        </div>
+      )}
     </main>
+  );
+}
+
+function EditCourseForm({ course, onClose, onSaved, API_URL }) {
+  const [title, setTitle] = useState(course.title);
+  const [description, setDescription] = useState(course.description);
+  const [duration, setDuration] = useState(course.duration);
+  const [difficulty, setDifficulty] = useState(course.difficulty);
+  const [categories, setCategories] = useState(course.categories.join(', '));
+  const [thumbnailUrl, setThumbnailUrl] = useState(course.thumbnail || '');
+  const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [videoUrl, setVideoUrl] = useState(course.videoUrl || '');
+  const [videoFile, setVideoFile] = useState(null);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    const form = new FormData();
+    form.append('title', title);
+    form.append('description', description);
+    form.append('duration', duration);
+    form.append('difficulty', difficulty);
+    form.append('categories', categories);
+    if (thumbnailFile) form.append('thumbnail', thumbnailFile); else form.append('thumbnailUrl', thumbnailUrl);
+    if (videoFile) form.append('video', videoFile); else form.append('videoUrl', videoUrl);
+
+    const res = await fetch(`${API_URL}/api/courses/${course.id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data?.message || 'Failed to update course');
+      return;
+    }
+    const updated = {
+      id: data.course._id,
+      title: data.course.title,
+      instructor: data.course.instructorName,
+      description: data.course.description,
+      duration: data.course.duration,
+      difficulty: data.course.difficulty,
+      categories: data.course.categories,
+      thumbnail: data.course.thumbnailUrl,
+      videoUrl: data.course.videoUrl,
+    };
+    onSaved(updated);
+  }
+
+  return (
+    <form onSubmit={handleSave} className="grid grid-cols-1 gap-4">
+      <div className="flex flex-col gap-2">
+        <label className="text-sm">Title</label>
+        <input className="w-full rounded-lg border border-border bg-secondary px-3 py-2" value={title} onChange={(e) => setTitle(e.currentTarget.value)} required />
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm">Description</label>
+        <textarea className="w-full rounded-lg border border-border bg-secondary px-3 py-2" rows={3} value={description} onChange={(e) => setDescription(e.currentTarget.value)} required />
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm">Duration</label>
+          <input className="w-full rounded-lg border border-border bg-secondary px-3 py-2" value={duration} onChange={(e) => setDuration(e.currentTarget.value)} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm">Difficulty</label>
+          <select className="w-full rounded-lg border border-border bg-secondary px-3 py-2" value={difficulty} onChange={(e) => setDifficulty(e.currentTarget.value)}>
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm">Categories</label>
+          <input className="w-full rounded-lg border border-border bg-secondary px-3 py-2" value={categories} onChange={(e) => setCategories(e.currentTarget.value)} />
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm">Thumbnail URL (or upload)</label>
+        <input className="w-full rounded-lg border border-border bg-secondary px-3 py-2" value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.currentTarget.value)} />
+        <input type="file" accept="image/*" onChange={(e) => setThumbnailFile(e.currentTarget.files?.[0] || null)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2" />
+      </div>
+      <div className="flex flex-col gap-2">
+        <label className="text-sm">Video URL (or upload)</label>
+        <input className="w-full rounded-lg border border-border bg-secondary px-3 py-2" value={videoUrl} onChange={(e) => setVideoUrl(e.currentTarget.value)} />
+        <input type="file" accept="video/*" onChange={(e) => setVideoFile(e.currentTarget.files?.[0] || null)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2" />
+      </div>
+      <div className="mt-2 flex items-center justify-end gap-3">
+        <button type="button" onClick={onClose} className="rounded-lg border border-border bg-transparent px-4 py-2 text-sm">Cancel</button>
+        <button type="submit" className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)]">Save</button>
+      </div>
+    </form>
   );
 }
