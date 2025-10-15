@@ -603,6 +603,9 @@ export default function ELearningPortal() {
                     </div>
                   </div>
                 </div>
+
+                {/* Comments */}
+                <CourseComments API_URL={API_URL} courseId={selectedCourse.id} currentUser={currentUser} />
               </>
             )}
           </section>
@@ -621,8 +624,8 @@ export default function ELearningPortal() {
             className="absolute inset-0 bg-foreground/10 backdrop-blur-sm transition"
             onClick={() => setIsCreateOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-0 shadow-lg">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-card/90 px-6 py-4 backdrop-blur">
               <div>
                 <h3 id="create-course-title" className="text-lg font-semibold leading-tight">
                   Create New Course
@@ -637,7 +640,7 @@ export default function ELearningPortal() {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleCreateCourse} className="grid grid-cols-1 gap-4">
+            <form onSubmit={handleCreateCourse} className="grid grid-cols-1 gap-4 px-6 py-4 max-h-[80vh] overflow-y-auto">
               <div className="flex flex-col gap-2">
                 <label htmlFor="course-title" className="text-sm">
                   Course Title
@@ -758,24 +761,25 @@ export default function ELearningPortal() {
                   className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground outline-none transition file:me-3 file:rounded-md file:border-0 file:bg-[var(--color-brand)] file:px-3 file:py-1.5 file:text-[var(--color-brand-foreground)] file:text-sm hover:file:brightness-110"
                 />
                 {newCourseVideoUrl ? (
-                  <video src={newCourseVideoUrl} className="mt-2 aspect-video w-full rounded-lg border border-border" controls />
+                  <video src={newCourseVideoUrl} className="mt-2 w-full max-h-64 rounded-lg border border-border object-contain" controls />
                 ) : null}
               </div>
-
-              <div className="mt-2 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="rounded-lg border border-border bg-transparent px-4 py-2 text-sm transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)] shadow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
-                >
-                  Add Course
-                </button>
+              <div className="sticky bottom-0 z-10 -mx-6 -mb-4 border-t border-border bg-card/90 px-6 py-4 backdrop-blur">
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateOpen(false)}
+                    className="rounded-lg border border-border bg-transparent px-4 py-2 text-sm transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)] shadow transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]"
+                  >
+                    Add Course
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -794,8 +798,8 @@ export default function ELearningPortal() {
             className="absolute inset-0 bg-foreground/10 backdrop-blur-sm transition"
             onClick={() => setIsEditOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-0 shadow-lg">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-card/90 px-6 py-4 backdrop-blur">
               <div>
                 <h3 id="edit-course-title" className="text-lg font-semibold leading-tight">
                   Edit Course
@@ -810,7 +814,7 @@ export default function ELearningPortal() {
                 ✕
               </button>
             </div>
-
+            <div className="px-6 py-4 max-h-[80vh] overflow-y-auto">
             <EditCourseForm
               course={editCourse}
               onClose={() => setIsEditOpen(false)}
@@ -821,6 +825,7 @@ export default function ELearningPortal() {
               }}
               API_URL={API_URL}
             />
+            </div>
           </div>
         </div>
       )}
@@ -918,5 +923,177 @@ function EditCourseForm({ course, onClose, onSaved, API_URL }) {
         <button type="submit" className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)]">Save</button>
       </div>
     </form>
+  );
+}
+
+function CourseComments({ API_URL, courseId, currentUser }) {
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const canComment = Boolean(currentUser);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/courses/${courseId}/comments`);
+        const data = await res.json();
+        if (!res.ok) return;
+        setComments(data.comments || []);
+      } catch {
+        // ignore
+      }
+    })();
+    // Subscribe to SSE for real-time
+    const ev = new EventSource(`${API_URL}/api/courses/${courseId}/comments/stream`);
+    ev.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data);
+        if (payload?.type === 'comment') {
+          if (payload.action === 'created' && payload.comment) {
+            setComments((prev) => (prev.some((c) => c._id === payload.comment._id) ? prev : [payload.comment, ...prev]));
+          } else if (payload.action === 'updated' && payload.comment) {
+            setComments((prev) => prev.map((c) => (c._id === payload.comment._id ? payload.comment : c)));
+          } else if (payload.action === 'deleted' && payload.commentId) {
+            setComments((prev) => prev.filter((c) => c._id !== payload.commentId));
+          }
+        }
+      } catch {}
+    };
+    return () => {
+      ev.close();
+    };
+  }, [API_URL, courseId]);
+
+  async function handleAddComment(e) {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/courses/${courseId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: commentText.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Failed to add comment');
+      setComments((prev) => (prev.some((c) => c._id === data.comment._id) ? prev : [data.comment, ...prev]));
+      setCommentText("");
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function handleDelete(commentId) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/courses/${courseId}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data?.message || 'Failed to delete comment');
+      }
+      setComments((prev) => prev.filter((c) => c._id !== commentId));
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function handleEdit(commentId, newContent) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/courses/${courseId}/comments/${commentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: newContent }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Failed to update comment');
+      setComments((prev) => prev.map((c) => (c._id === data.comment._id ? data.comment : c)));
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Comments</h3>
+      {canComment ? (
+        <form onSubmit={handleAddComment} className="mb-4 flex gap-2">
+          <input
+            className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-foreground placeholder:text-muted-foreground outline-none"
+            placeholder="Add a comment"
+            value={commentText}
+            onChange={(e) => setCommentText(e.currentTarget.value)}
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-foreground)]"
+          >
+            Post
+          </button>
+        </form>
+      ) : (
+        <p className="mb-4 text-sm text-muted-foreground">Log in to post a comment.</p>
+      )}
+      <div className="space-y-3">
+        {comments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No comments yet.</p>
+        ) : (
+          comments.map((c) => {
+            const when = c.createdAt ? new Date(c.createdAt) : null;
+            const whenStr = when ? when.toLocaleString() : '';
+            return (
+              <CommentItem
+                key={c._id}
+                comment={c}
+                whenStr={whenStr}
+                canEdit={Boolean(currentUser && currentUser.id === c.userId)}
+                onDelete={() => handleDelete(c._id)}
+                onEdit={(newContent) => handleEdit(c._id, newContent)}
+              />
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CommentItem({ comment, whenStr, canEdit, onDelete, onEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(comment.content);
+  return (
+    <div className="rounded-lg border border-border bg-secondary p-3">
+      <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{comment.userName}</span>
+        <div className="flex items-center gap-2">
+          {whenStr ? <span>{whenStr}</span> : null}
+          {canEdit ? (
+            <>
+              {!editing ? (
+                <>
+                  <button className="underline" onClick={() => setEditing(true)}>Edit</button>
+                  <button className="underline" onClick={onDelete}>Delete</button>
+                </>
+              ) : (
+                <>
+                  <button className="underline" onClick={() => { setEditing(false); setText(comment.content); }}>Cancel</button>
+                  <button className="underline" onClick={() => { if (text.trim()) { onEdit(text.trim()); setEditing(false); } }}>Save</button>
+                </>
+              )}
+            </>
+          ) : null}
+        </div>
+      </div>
+      {editing ? (
+        <textarea className="w-full rounded-lg border border-border bg-card px-3 py-2" rows={2} value={text} onChange={(e) => setText(e.currentTarget.value)} />
+      ) : (
+        <div className="text-sm">{comment.content}</div>
+      )}
+    </div>
   );
 }
